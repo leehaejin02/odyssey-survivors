@@ -1,0 +1,6 @@
+node_modules/
+dist/
+dist-sim/
+.gh-pages-worktree/
+*.log
+.DS_Store
