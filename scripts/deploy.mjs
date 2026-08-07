@@ -20,14 +20,20 @@ const distDir = join(projectRoot, 'dist');
 const worktreeDir = join(projectRoot, '.gh-pages-worktree');
 const branch = 'gh-pages';
 
+// Windows에서는 execFileSync가 shell 없이 npm(.cmd)을 못 찾는다 (ENOENT).
+// git.exe는 실제 실행 파일이라 영향 없음 — npm/npx에만 shell을 켠다.
+// (shell: true는 인자 자동 따옴표 처리가 안 돼 커밋 메시지처럼 공백 포함 인자가 깨지므로 git에는 쓰지 않는다)
+const isWindows = process.platform === 'win32';
+const needsShell = (cmd) => isWindows && (cmd === 'npm' || cmd === 'npx');
+
 function run(cmd, args, opts = {}) {
   console.log(`$ ${cmd} ${args.join(' ')}`);
-  return execFileSync(cmd, args, { cwd: projectRoot, stdio: 'inherit', ...opts });
+  return execFileSync(cmd, args, { cwd: projectRoot, stdio: 'inherit', shell: needsShell(cmd), ...opts });
 }
 
 function runCapture(cmd, args) {
   try {
-    return execFileSync(cmd, args, { cwd: projectRoot }).toString().trim();
+    return execFileSync(cmd, args, { cwd: projectRoot, shell: needsShell(cmd) }).toString().trim();
   } catch {
     return '';
   }
