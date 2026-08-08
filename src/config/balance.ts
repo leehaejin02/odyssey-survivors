@@ -382,8 +382,15 @@ export const VISUAL = {
     BANNER: 90,
     HUD: 100,
   },
-  /** arena.png는 1920×1080 = ARENA(960×540)의 정확히 2배라 이 배율로 1장을 통째로 깐다(타일링·이음매 없음). */
-  ARENA_IMAGE_SCALE: 0.5,
+  /**
+   * 배경 1장을 통째로 깐다(타일링·이음매 없음).
+   * **1.0인 이유**: 백킹스토어가 480×270로 고정(D14)이고 카메라 줌이 1이라 **1 월드 px = 1 캔버스 px**다.
+   * 게다가 `main.ts`가 `pixelArt: true`(NEAREST)라 0.5배로 깔면 원본 2×2 블록 중 1픽셀만 표본되고
+   * **나머지 3/4는 화면에 절대 도달하지 않는다.** 즉 1920 원본은 용량만 4배이고 화질 이득이 0이다.
+   * 배포 산출물을 960×540(= ARENA와 1:1)으로 두고 축소는 오프라인 Lanczos로 끝낸다 — 런타임
+   * 점표본(NEAREST)보다 면적 평균(Lanczos)이 낫다. (D25)
+   */
+  ARENA_IMAGE_SCALE: 1.0,
   /** 배경 폴백 격자 간격(px). 플레이어 속도 60 = 초당 2.5칸 통과 — 이동감이 생기는 최소 밀도. */
   ARENA_GRID_PX: 24,
   /** 피격 시 스프라이트 흰색 플래시 지속(ms). IFRAME_MS 600의 1/5 — 무적 상태를 다 덮지 않아 "아직 무적인가"를 헷갈리지 않게 한다. */
@@ -479,8 +486,14 @@ export const ASSETS = {
   MAX_IMAGE_FILES: 5,
   /** 생성 오디오 상한. */
   MAX_AUDIO_FILES: 1,
-  /** 이미지 5장 합계 상한(KB). 1920×1080 arena.png가 대부분을 먹는다(약 1000KB 배정). */
-  MAX_IMAGE_TOTAL_KB: 1500,
+  /**
+   * 이미지 5장 합계 상한(KB). **1500 → 800으로 조인다(D25).**
+   * 실측: 스프라이트 4종 합계 ≈ 8KB + 배경 960×540 JPEG 26.7KB = 약 35KB.
+   * 800은 "최악의 폴백"인 배경 960×540 무손실 PNG(720.8KB) + 스프라이트(≈8KB) = 728.6KB가
+   * 아직 들어가는 값이다. 즉 **화질 문제가 생겼을 때 PNG로 되돌릴 여지는 남기되**,
+   * 1920×1080 PNG(3070.8KB)나 미압축 재출력이 다시 들어오면 즉시 걸린다.
+   */
+  MAX_IMAGE_TOTAL_KB: 800,
   /** BGM 1곡 상한(KB). mp3 128kbps × 90초 ≈ 1400KB. 여유 포함. */
   MAX_AUDIO_TOTAL_KB: 2000,
   /** public/ 전체 상한(KB). 20Mbps에서 첫 로드 약 1.6초 — 심사자가 흰 화면을 의심하기 전에 뜬다. */
@@ -488,13 +501,18 @@ export const ASSETS = {
   /**
    * 고정 경로. **하나라도 없으면 코드 도형/무음 폴백으로 대체하고 게임은 정상 진행한다.**
    * 도착 우선순위: player > grunt > arena > boss > brute (뒤쪽이 끝내 안 와도 제출 가능해야 한다).
+   *
+   * **포맷 규칙**: 스프라이트 4종은 **알파가 있는 PNG**, 배경 1장은 **알파가 없는 JPEG**다(D25).
+   * 배경은 아레나 전체를 덮으므로 투명 픽셀이 원리적으로 존재하지 않고, 사진 계열 석재
+   * 텍스처라 무손실 PNG가 노이즈를 그대로 저장해 27배(720.8KB vs 26.7KB) 손해를 본다.
+   * 이 예외는 **배경 1장에만** 적용된다 — 스프라이트를 JPEG로 바꾸면 알파가 사라져 사각형이 된다.
    */
   PATHS: {
     player: 'sprites/player.png',
     grunt: 'sprites/grunt.png',
     brute: 'sprites/brute.png',
     boss: 'sprites/boss.png',
-    arena: 'assets/arena.png',
+    arena: 'assets/arena.jpg',
     bgm: 'audio/bgm.mp3',
   },
 } as const;
