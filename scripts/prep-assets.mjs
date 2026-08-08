@@ -39,11 +39,11 @@ const R = 3;
 const SPRITES = [
   // 1차 생성물(오디세우스 플레이어 스프라이트.png)은 DeeVid AI 워터마크가 박혀 배포에서 뺐다.
   // 워터마크가 바운딩 박스를 우상단으로 늘려 크롭까지 망가졌다. 원본은 출처 증빙으로 남겨 둔다.
-  { key: 'player', src: '오디세우스 플레이어 스프라이트2.png', out: 'public/sprites/player.png', px: 18 * R },
-  { key: 'grunt',  src: '그리스 구혼자 적 스프라이트.png',     out: 'public/sprites/grunt.png',  px: 14 * R },
-  { key: 'brute',  src: '로터스이터 적 스프라이트.png',        out: 'public/sprites/brute.png',  px: 22 * R },
-  { key: 'boss',   src: '폴리페모스 보스 스프라이트.png',      out: 'public/sprites/boss.png',   px: 40 * R },
-  // 타이틀 화면 전용. 인게임 player.png(18px)를 확대하면 뭉개지므로 원본에서 따로 뽑는다.
+  { key: 'player', src: '오디세우스 플레이어 스프라이트2.png', out: 'public/sprites/player.png', px: 34 * R },
+  { key: 'grunt',  src: '그리스 구혼자 적 스프라이트.png',     out: 'public/sprites/grunt.png',  px: 20 * R },
+  { key: 'brute',  src: '로터스이터 적 스프라이트.png',        out: 'public/sprites/brute.png',  px: 30 * R },
+  { key: 'boss',   src: '폴리페모스 보스 스프라이트.png',      out: 'public/sprites/boss.png',   px: 56 * R },
+  // 타이틀 화면 전용. 인게임 player.png(월드 34)를 확대하면 뭉개지므로 원본에서 따로 뽑는다.
   // 128px = 논리 해상도 높이 270의 47%. 제목·조작안내·시련 3종 목록이 들어갈 자리를 남기는 상한이다.
   // 새 생성물이 아니라 player 와 같은 원본에서 파생된 것이라 ASSET_CREDITS 행이 늘지 않는다.
   { key: 'titleHero', src: '오디세우스 플레이어 스프라이트2.png', out: 'public/sprites/title-hero.png', px: 128 * R },
