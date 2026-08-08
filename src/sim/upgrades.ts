@@ -34,9 +34,11 @@ export function buildUpgradeChoices(rng: Rng, upgradeLevels: Record<string, numb
     usedIds.add(picked.id);
   }
 
-  if (chosen.length < 3) {
+  // "3택"의 3은 UPGRADE_CATEGORIES.length(화력/생존/유틸)에서 그대로 유도한다 — 새 리터럴을 박지 않는다.
+  const choiceCount = UPGRADE_CATEGORIES.length;
+  if (chosen.length < choiceCount) {
     const remaining = UPGRADE_POOL.filter((def) => !usedIds.has(def.id) && isEligible(def, upgradeLevels));
-    while (chosen.length < 3 && remaining.length > 0) {
+    while (chosen.length < choiceCount && remaining.length > 0) {
       const idx = nextInt(rng, remaining.length);
       const picked = remaining.splice(idx, 1)[0];
       chosen.push(picked);

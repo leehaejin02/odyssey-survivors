@@ -1,36 +1,22 @@
 import Phaser from 'phaser';
-
-// ── 논리 해상도 (백킹스토어) ──
-// 씬 4종(BootScene/TitleScene/GameScene/ResultScene)은 다음 단계(gd 승인 후 tech)에서 채운다.
-// 이 파일은 배포 경로 검증용 placeholder 부트다.
-const LOGICAL_WIDTH = 480;
-const LOGICAL_HEIGHT = 270;
-
-class BootPlaceholderScene extends Phaser.Scene {
-  create(): void {
-    this.cameras.main.setBackgroundColor('#1b1f3b');
-    this.add
-      .text(LOGICAL_WIDTH / 2, LOGICAL_HEIGHT / 2, '오디세이 서바이버즈', {
-        fontFamily: 'sans-serif',
-        fontSize: '20px',
-        color: '#ffffff',
-      })
-      .setOrigin(0.5);
-  }
-}
+import { SCREEN } from './config/balance';
+import { BootScene } from './scenes/BootScene';
+import { TitleScene } from './scenes/TitleScene';
+import { GameScene } from './scenes/GameScene';
+import { ResultScene } from './scenes/ResultScene';
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'app',
-  width: LOGICAL_WIDTH,
-  height: LOGICAL_HEIGHT,
+  width: SCREEN.WIDTH,
+  height: SCREEN.HEIGHT,
   backgroundColor: '#000000',
   pixelArt: true,
   roundPixels: true,
   scale: {
     mode: Phaser.Scale.NONE,
   },
-  scene: [BootPlaceholderScene],
+  scene: [BootScene, TitleScene, GameScene, ResultScene],
 });
 
 // ── 비정수 devicePixelRatio 대응 ──
@@ -43,8 +29,8 @@ function fitCanvasToIntegerScale(): void {
   if (!canvas) return;
 
   const dpr = window.devicePixelRatio || 1;
-  const cssUnitWidth = LOGICAL_WIDTH / dpr;
-  const cssUnitHeight = LOGICAL_HEIGHT / dpr;
+  const cssUnitWidth = SCREEN.WIDTH / dpr;
+  const cssUnitHeight = SCREEN.HEIGHT / dpr;
 
   const maxScaleByWidth = Math.floor(window.innerWidth / cssUnitWidth);
   const maxScaleByHeight = Math.floor(window.innerHeight / cssUnitHeight);

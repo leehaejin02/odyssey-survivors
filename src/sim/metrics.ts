@@ -45,6 +45,9 @@ export function computeTrialMetrics(trialId: string, summaries: RunSummary[]): T
   const total = summaries.length;
   const cleared = summaries.filter((s) => s.cleared);
   const died = summaries.filter((s) => !s.cleared);
+  // ⚠️ 리터럴 30 — GDD §6 "30초 이전 사망 비율"의 "30"에 해당하는 balance.ts 상수가 없다.
+  // TARGET_METRICS.EARLY_DEATH_RATE_MAX(0.15)는 있지만 "이르다"의 경계값(30초) 자체는
+  // balance.ts 어디에도 없다. gd에게 보고 대상 — EARLY_DEATH_SEC 같은 상수 추가를 권한다.
   const earlyDeaths = died.filter((s) => s.elapsedSec < 30);
 
   return {
