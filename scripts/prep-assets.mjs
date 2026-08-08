@@ -37,12 +37,21 @@ const SPRITES = [
   { key: 'grunt',  src: '그리스 구혼자 적 스프라이트.png',     out: 'public/sprites/grunt.png',  px: 14 },
   { key: 'brute',  src: '로터스이터 적 스프라이트.png',        out: 'public/sprites/brute.png',  px: 22 },
   { key: 'boss',   src: '폴리페모스 보스 스프라이트.png',      out: 'public/sprites/boss.png',   px: 40 },
+  // 타이틀 화면 전용. 인게임 player.png(18px)를 확대하면 뭉개지므로 원본에서 따로 뽑는다.
+  // 128px = 논리 해상도 높이 270의 47%. 제목·조작안내·시련 3종 목록이 들어갈 자리를 남기는 상한이다.
+  // 새 생성물이 아니라 player 와 같은 원본에서 파생된 것이라 ASSET_CREDITS 행이 늘지 않는다.
+  { key: 'titleHero', src: '오디세우스 플레이어 스프라이트2.png', out: 'public/sprites/title-hero.png', px: 128 },
 ];
 
 // 배경 판정: 아주 밝고(min>222) 거의 무채색(채널 폭<14)인 픽셀만 후보.
 // 실측 체커보드 = rgb(254,254,254) / rgb(238,238,238).
 const BG_MIN_LEVEL = 222;
 const BG_MAX_SPREAD = 14;
+/** 실측 체커보드 두 톤. 갇힌 주머니 판별에만 쓴다(테두리 flood fill 은 위 느슨한 기준을 쓴다). */
+const CHECKER_LIGHT = 254;
+const CHECKER_DARK = 238;
+const CHECKER_TOL = 6;
+const CHECKER_NEUTRAL_TOL = 6;
 /** 축소 시 흰 테를 막기 위해 캐릭터 색을 투명 영역으로 번지게 할 거리(px, 2560 기준). */
 const BLEED_PX = 24;
 /** 잘라낸 캐릭터 주변에 남길 여백 비율. 0이면 스프라이트가 타일 경계에 딱 붙어 답답하다. */
@@ -102,7 +111,45 @@ function floodFillBackground(rgb, w, h) {
     if (y > 0) push(i - w);
     if (y < h - 1) push(i + w);
   }
-  return alpha;
+
+  // ── 갇힌 체커보드 주머니 ──────────────────────────────────────
+  // 테두리 flood fill 은 "둘러싸인" 배경을 못 지운다. 오디세우스의 활과 활시위
+  // 사이가 그렇다 — 18px 에서는 뭉쳐서 안 보였지만 128px 타이틀에서 격자가 드러났다.
+  //
+  // 그렇다고 색만 보고 전역으로 지우면 보스의 뼈색 몸통에 구멍이 뚫린다.
+  // 판별 기준: 체커보드는 **두 톤이 반드시 함께** 나타난다(밝은 254, 어두운 238).
+  // 캐릭터의 흰 하이라이트는 한 톤뿐이다. 그래서 남은 덩어리를 훑어
+  // **두 톤을 모두 가진 덩어리만** 지운다.
+  const near = (v, t) => Math.abs(v - t) <= CHECKER_TOL;
+  const tone = (i) => {
+    const r = rgb[i * 3], g = rgb[i * 3 + 1], b = rgb[i * 3 + 2];
+    if (Math.max(r, g, b) - Math.min(r, g, b) > CHECKER_NEUTRAL_TOL) return 0;
+    if (near(r, CHECKER_LIGHT)) return 1;
+    if (near(r, CHECKER_DARK)) return 2;
+    return 0;
+  };
+  let pockets = 0;
+  for (let s = 0; s < n; s++) {
+    if (seen[s] || !tone(s)) continue;
+    const comp = [];
+    let tones = 0;
+    seen[s] = 1; queue[0] = s; head = 0; tail = 1;
+    while (head < tail) {
+      const i = queue[head++];
+      comp.push(i);
+      tones |= tone(i);
+      const x = i % w, y = (i / w) | 0;
+      for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1]) {
+        if (j < 0 || seen[j] || !tone(j)) continue;
+        seen[j] = 1; queue[tail++] = j;
+      }
+    }
+    if (tones === 3) {                 // 밝은 톤과 어두운 톤을 모두 가진 = 체커보드
+      for (const i of comp) alpha[i] = 0;
+      pockets++;
+    }
+  }
+  return { alpha, pockets };
 }
 
 /** 투명 영역으로 이웃한 불투명 색을 번지게 한다. 축소 시 흰 테를 막는 유일한 방법이다. */
@@ -146,7 +193,7 @@ async function prepSprite(spec) {
   const rgb = await readRGB(srcPath);
   if (rgb.length !== w * h * 3) throw new Error(`${spec.key}: raw 길이 불일치`);
 
-  const alpha = floodFillBackground(rgb, w, h);
+  const { alpha, pockets } = floodFillBackground(rgb, w, h);
   let cleared = 0;
   for (let i = 0; i < alpha.length; i++) if (!alpha[i]) cleared++;
 
@@ -188,6 +235,7 @@ async function prepSprite(spec) {
   console.log(
     `  ${spec.key.padEnd(6)} ${w}x${h} → ${spec.px}px  ` +
     `배경 ${(cleared / (w * h) * 100).toFixed(1)}% 제거  ` +
+    `갇힌주머니 ${pockets}개  ` +
     `크롭 ${side}px@(${cx},${cy})  ${kb}KB${wmNote}${wmInCrop}`
   );
   return { key: spec.key, kb };
