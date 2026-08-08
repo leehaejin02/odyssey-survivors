@@ -1,11 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "CommonJS",
+    "moduleResolution": "Bundler",
     "lib": ["ES2022"],
     "outDir": "dist-sim",
-    "rootDir": "src/sim",
+    "rootDir": "src",
     "strict": true,
     "declaration": false,
     "skipLibCheck": true,
@@ -13,5 +13,5 @@
     "forceConsistentCasingInFileNames": true,
     "types": []
   },
-  "include": ["src/sim"]
+  "include": ["src/sim/**/*", "src/config/balance.ts"]
 }

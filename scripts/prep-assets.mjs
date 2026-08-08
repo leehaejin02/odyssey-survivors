@@ -31,7 +31,9 @@ function argOf(flag) {
 // out 픽셀 크기는 src/config/balance.ts 의 VISUAL.SPRITE_PX 와 같아야 한다.
 // 여기 값을 바꾸는 게 아니라, balance.ts 가 바뀌면 여기를 맞춘다(원본은 balance.ts).
 const SPRITES = [
-  { key: 'player', src: '오디세우스 플레이어 스프라이트.png', out: 'public/sprites/player.png', px: 18, watermark: 'DeeVid AI' },
+  // 1차 생성물(오디세우스 플레이어 스프라이트.png)은 DeeVid AI 워터마크가 박혀 배포에서 뺐다.
+  // 워터마크가 바운딩 박스를 우상단으로 늘려 크롭까지 망가졌다. 원본은 출처 증빙으로 남겨 둔다.
+  { key: 'player', src: '오디세우스 플레이어 스프라이트2.png', out: 'public/sprites/player.png', px: 18 },
   { key: 'grunt',  src: '그리스 구혼자 적 스프라이트.png',     out: 'public/sprites/grunt.png',  px: 14 },
   { key: 'brute',  src: '로터스이터 적 스프라이트.png',        out: 'public/sprites/brute.png',  px: 22 },
   { key: 'boss',   src: '폴리페모스 보스 스프라이트.png',      out: 'public/sprites/boss.png',   px: 40 },

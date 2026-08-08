@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "typecheck:sim": "tsc --noEmit -p tsconfig.sim.json",
     "check-boundary": "node scripts/check-boundary.mjs",
-    "deploy": "node scripts/deploy.mjs"
+    "deploy": "node scripts/deploy.mjs",
+    "sim": "tsc -p tsconfig.sim.json && node scripts/sim-runner.mjs"
   },
   "dependencies": {
     "phaser": "^3.90.0"
