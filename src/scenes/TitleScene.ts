@@ -86,7 +86,14 @@ export class TitleScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-SPACE', () => this.startSelected());
   }
 
-  /** 배경 arena.jpg(1:1, 화면 중앙 크롭) + 암막. 틴트 없음(§9-8-2 — 타이틀에는 시련이 없다). */
+  /**
+   * 배경 arena.jpg(1:1, 화면 중앙 크롭) + 암막. 틴트 없음(§9-8-2 — 타이틀에는 시련이 없다).
+   *
+   * 암막 사각형을 전체 화면 클릭 영역으로도 쓴다: "히어로/빈 공간 클릭 = 현재 선택 항목 시작".
+   * 시련 이름 텍스트는 이 사각형보다 나중에 추가되므로(= 표시 목록에서 위) 같은 지점을 클릭하면
+   * Phaser의 기본 입력 판정(topOnly)이 텍스트를 우선 집어 "그 항목 선택+시작"이 먼저 발동하고,
+   * 텍스트가 없는 지점만 이 배경 핸들러로 떨어진다 — 두 핸들러가 동시에 발동하지 않는다.
+   */
   private buildBackground(): void {
     if (this.textures.exists('arena')) {
       const bg = this.add.image(SCREEN.WIDTH / 2, SCREEN.HEIGHT / 2, 'arena');
@@ -99,7 +106,9 @@ export class TitleScene extends Phaser.Scene {
 
     this.add
       .rectangle(0, 0, SCREEN.WIDTH, SCREEN.HEIGHT, 0x000000, HUD.TITLE.DIM_ALPHA)
-      .setOrigin(0, 0);
+      .setOrigin(0, 0)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.startSelected());
   }
 
   /** 히어로(파생 에셋). 없으면 그 자리를 비운다 — 대체 도형을 그리지 않는다(§9-8-6). */

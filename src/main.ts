@@ -38,7 +38,24 @@ function fitCanvasToIntegerScale(): void {
 
   canvas.style.width = `${cssUnitWidth * scale}px`;
   canvas.style.height = `${cssUnitHeight * scale}px`;
+
+  // scale.mode가 NONE이면 Phaser는 브라우저 resize에도 캔버스 DOM 크기를 스스로 재지 않는다
+  // (Phaser 타입 주석: "This is called automatically ... as long as it is using a Scale Mode
+  // other than 'NONE'"). 여기서 canvas.style을 직접 건드리므로, 포인터 좌표 변환에 쓰이는
+  // ScaleManager의 내부 bounds/scale을 수동으로 갱신해 주지 않으면 클릭 좌표가 실제 렌더 위치와
+  // 어긋난다 — 화면에 보이는 글자를 그대로 클릭해도 반응하지 않는 버그의 원인이었다(실측 확인).
+  game.scale.refresh();
 }
 
 window.addEventListener('resize', fitCanvasToIntegerScale);
-game.events.once(Phaser.Core.Events.READY, fitCanvasToIntegerScale);
+game.events.once(Phaser.Core.Events.READY, () => {
+  fitCanvasToIntegerScale();
+
+  // 페이지를 막 열었을 때 포커스가 캔버스에 없으면(주소창 등에 남아 있으면) 키보드 입력이
+  // 씹힌다(실측 확인: 로드 직후 Enter 무반응, 캔버스를 한 번 클릭한 뒤에는 정상). 캔버스를
+  // 포커스 가능하게 만들고 즉시 포커스를 준다 — 클릭 없이도 Enter/방향키가 바로 먹게 하기 위함.
+  if (game.canvas) {
+    game.canvas.tabIndex = 0;
+    game.canvas.focus();
+  }
+});
