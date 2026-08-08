@@ -3,6 +3,13 @@
 // sim의 상태를 읽어 그리기만 한다(하네스 3). 진행도는 state.progress를 그대로 쓴다 —
 // trialProgress() 호출은 engine.ts의 evaluateOutcome() 1곳뿐이다(GDD §8-3, §8-13).
 // 좌표·크기·색은 전부 balance.ts의 HUD/VISUAL에서 온다.
+//
+// 카메라 분리(§9-9): GameScene의 메인 카메라는 플레이어를 따라가며 줌 R이 걸려 있다.
+// Phaser 카메라는 줌을 뷰포트 "중심" 기준으로 적용하므로, follow가 없는 고정 UI를
+// scrollFactor(0)만으로 메인 카메라에 얹으면 화면 중심 쏠림만큼 어긋난다(실측 확인 —
+// follow가 그 쏠림을 스크롤로 상쇄해 줘서 월드 오브젝트만 정상으로 보였을 뿐이다).
+// 그래서 HUD는 GameScene이 별도로 만든 줌 R·원점(0,0)·스크롤 고정 카메라로만 그리고,
+// 메인 카메라에서는 제외한다 — 이 파일의 모든 오브젝트가 생성 직후 `ignoreOnMain()`을 거친다.
 // ─────────────────────────────────────────────────────────────
 
 import Phaser from 'phaser';
@@ -52,8 +59,9 @@ class Bar {
     fillColor: number,
     depth: number,
   ) {
-    scene.add.rectangle(x, y, w, h, bgColor).setOrigin(0, 0).setScrollFactor(0).setDepth(depth);
+    const bg = scene.add.rectangle(x, y, w, h, bgColor).setOrigin(0, 0).setScrollFactor(0).setDepth(depth);
     this.fill = scene.add.rectangle(x, y, w, h, fillColor).setOrigin(0, 0).setScrollFactor(0).setDepth(depth + 1);
+    scene.cameras.main.ignore([bg, this.fill]);
   }
 
   setRatio(ratio: number): void {
@@ -103,6 +111,11 @@ export class Hud {
     this.scene = scene;
   }
 
+  /** GameScene의 HUD 전용 카메라에서만 그려지도록, 월드를 따라가는 메인 카메라에서는 뺀다. */
+  private ignoreOnMain(obj: Phaser.GameObjects.GameObject): void {
+    this.scene.cameras.main.ignore(obj);
+  }
+
   create(): void {
     this.buildBars();
     this.buildTimerAndKills();
@@ -139,13 +152,17 @@ export class Hud {
       .text(HUD.TIMER.X, HUD.TIMER.Y, '', { fontFamily: 'sans-serif', fontSize: `${HUD.FONT_MIN_PX}px`, color: '#f2ece0' })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
-      .setDepth(VISUAL.DEPTH.HUD);
+      .setDepth(VISUAL.DEPTH.HUD)
+      .setResolution(SCREEN.SUPERSAMPLE);
+    this.ignoreOnMain(this.timerText);
 
     this.killsText = this.scene.add
       .text(HUD.KILLS.X, HUD.KILLS.Y, '', { fontFamily: 'sans-serif', fontSize: `${HUD.FONT_MIN_PX}px`, color: '#f2ece0' })
       .setOrigin(1, 0)
       .setScrollFactor(0)
-      .setDepth(VISUAL.DEPTH.HUD);
+      .setDepth(VISUAL.DEPTH.HUD)
+      .setResolution(SCREEN.SUPERSAMPLE);
+    this.ignoreOnMain(this.killsText);
   }
 
   private buildStepPips(): void {
@@ -159,6 +176,7 @@ export class Hud {
         .setOrigin(0, 0)
         .setScrollFactor(0)
         .setDepth(VISUAL.DEPTH.HUD);
+      this.ignoreOnMain(rect);
       this.stepPips.push(rect);
     }
 
@@ -170,7 +188,9 @@ export class Hud {
       })
       .setOrigin(0, 0)
       .setScrollFactor(0)
-      .setDepth(VISUAL.DEPTH.HUD);
+      .setDepth(VISUAL.DEPTH.HUD)
+      .setResolution(SCREEN.SUPERSAMPLE);
+    this.ignoreOnMain(this.stepLabel);
   }
 
   private buildBadgeSlots(): void {
@@ -192,7 +212,10 @@ export class Hud {
         .setOrigin(0.5)
         .setScrollFactor(0)
         .setDepth(VISUAL.DEPTH.HUD + 1)
-        .setVisible(false);
+        .setVisible(false)
+        .setResolution(SCREEN.SUPERSAMPLE);
+      this.ignoreOnMain(bg);
+      this.ignoreOnMain(levelText);
       this.badgeSlots.push({ bg, levelText });
     }
   }
@@ -203,14 +226,18 @@ export class Hud {
       .setOrigin(1, 0)
       .setScrollFactor(0)
       .setDepth(VISUAL.DEPTH.HUD)
-      .setVisible(false);
+      .setVisible(false)
+      .setResolution(SCREEN.SUPERSAMPLE);
+    this.ignoreOnMain(this.fpsText);
 
     this.toastText = this.scene.add
       .text(HUD.TOAST.X, HUD.TOAST.Y, '', { fontFamily: 'sans-serif', fontSize: `${HUD.FONT_MIN_PX}px`, color: '#f2ece0' })
       .setOrigin(1, 0)
       .setScrollFactor(0)
       .setDepth(VISUAL.DEPTH.HUD)
-      .setVisible(false);
+      .setVisible(false)
+      .setResolution(SCREEN.SUPERSAMPLE);
+    this.ignoreOnMain(this.toastText);
   }
 
   private buildBannerTexts(): void {
@@ -223,7 +250,9 @@ export class Hud {
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(VISUAL.DEPTH.BANNER)
-      .setVisible(false);
+      .setVisible(false)
+      .setResolution(SCREEN.SUPERSAMPLE);
+    this.ignoreOnMain(this.bannerName);
 
     this.bannerTagline = this.scene.add
       .text(SCREEN.WIDTH / 2, SCREEN.HEIGHT / 2 + 10, '', {
@@ -236,7 +265,9 @@ export class Hud {
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(VISUAL.DEPTH.BANNER)
-      .setVisible(false);
+      .setVisible(false)
+      .setResolution(SCREEN.SUPERSAMPLE);
+    this.ignoreOnMain(this.bannerTagline);
   }
 
   private bindToggles(): void {
@@ -334,6 +365,7 @@ export class Hud {
       .setOrigin(0, 0)
       .setScrollFactor(0)
       .setDepth(VISUAL.DEPTH.HUD);
+    this.ignoreOnMain(this.choiceDim);
 
     this.choiceTitle = this.scene.add
       .text(SCREEN.WIDTH / 2, HUD.CHOICE_CARD.TITLE_Y, `LEVEL ${state.player.level}`, {
@@ -343,7 +375,9 @@ export class Hud {
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
-      .setDepth(VISUAL.DEPTH.HUD);
+      .setDepth(VISUAL.DEPTH.HUD)
+      .setResolution(SCREEN.SUPERSAMPLE);
+    this.ignoreOnMain(this.choiceTitle);
 
     const card = HUD.CHOICE_CARD;
     const totalW = choices.length * card.W + (choices.length - 1) * card.GAP;
@@ -375,7 +409,8 @@ export class Hud {
         })
         .setOrigin(0, 0.5)
         .setScrollFactor(0)
-        .setDepth(VISUAL.DEPTH.HUD + 1);
+        .setDepth(VISUAL.DEPTH.HUD + 1)
+        .setResolution(SCREEN.SUPERSAMPLE);
 
       const nameText = this.scene.add
         .text(x + card.W / 2, y + 34, def.name, {
@@ -387,7 +422,8 @@ export class Hud {
         })
         .setOrigin(0.5, 0)
         .setScrollFactor(0)
-        .setDepth(VISUAL.DEPTH.HUD + 1);
+        .setDepth(VISUAL.DEPTH.HUD + 1)
+        .setResolution(SCREEN.SUPERSAMPLE);
 
       const nextLevel = (state.player.upgradeLevels[def.id] ?? 0) + 1;
       const levelText = this.scene.add
@@ -398,9 +434,16 @@ export class Hud {
         })
         .setOrigin(0.5, 0)
         .setScrollFactor(0)
-        .setDepth(VISUAL.DEPTH.HUD + 1);
+        .setDepth(VISUAL.DEPTH.HUD + 1)
+        .setResolution(SCREEN.SUPERSAMPLE);
 
       hit.on('pointerdown', () => onPick(def.id));
+
+      this.ignoreOnMain(hit);
+      this.ignoreOnMain(badge);
+      this.ignoreOnMain(catLabel);
+      this.ignoreOnMain(nameText);
+      this.ignoreOnMain(levelText);
 
       this.choiceCards.push({ hit, badge, catLabel, nameText, levelText });
     });

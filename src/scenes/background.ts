@@ -19,20 +19,23 @@ function multiplyColor(base: number, tint: number): number {
 /**
  * 아레나 배경을 그린다. 'arena' 텍스처가 있으면 이미지를 깔고, 없으면 폴백 격자를 그린다.
  * 두 경우 모두 trial.bgTint를 곱연산으로 적용해 시련 간 시각 구분을 유지한다.
+ *
+ * 생성한 오브젝트를 반환한다 — GameScene이 이걸 HUD 전용 카메라의 ignore 목록에 등록해
+ * 월드 오브젝트가 HUD 카메라에 이중으로 그려지지 않게 한다(§9-9 카메라 분리, 아래 GameScene 주석 참조).
  */
-export function createArenaBackground(scene: Phaser.Scene, trial: TrialDef): void {
+export function createArenaBackground(scene: Phaser.Scene, trial: TrialDef): Phaser.GameObjects.GameObject[] {
   if (scene.textures.exists('arena')) {
     const bg = scene.add.image(ARENA.WIDTH / 2, ARENA.HEIGHT / 2, 'arena');
     bg.setDisplaySize(ARENA.WIDTH * VISUAL.ARENA_IMAGE_SCALE, ARENA.HEIGHT * VISUAL.ARENA_IMAGE_SCALE);
     bg.setTint(trial.bgTint);
     bg.setDepth(VISUAL.DEPTH.ARENA);
-    return;
+    return [bg];
   }
 
   const baseColor = multiplyColor(VISUAL.COLOR.ARENA_FALLBACK, trial.bgTint);
   const gridColor = multiplyColor(VISUAL.COLOR.ARENA_GRID, trial.bgTint);
 
-  scene.add
+  const base = scene.add
     .rectangle(ARENA.WIDTH / 2, ARENA.HEIGHT / 2, ARENA.WIDTH, ARENA.HEIGHT, baseColor)
     .setDepth(VISUAL.DEPTH.ARENA);
 
@@ -44,4 +47,5 @@ export function createArenaBackground(scene: Phaser.Scene, trial: TrialDef): voi
   for (let y = 0; y <= ARENA.HEIGHT; y += VISUAL.ARENA_GRID_PX) {
     grid.lineBetween(0, y, ARENA.WIDTH, y);
   }
+  return [base, grid];
 }

@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import Phaser from 'phaser';
-import { ARENA, TRIALS, VISUAL, type EnemyTypeId } from '../config/balance';
+import { ARENA, SCREEN, TRIALS, VISUAL, type EnemyTypeId } from '../config/balance';
 import { createRunState, resolveUpgradeChoice, stepRun, type RunState, type Vec2 } from '../sim';
 import { createEntityView, type EntityKind, type EntityView } from './sprites';
 import { createArenaBackground } from './background';
@@ -24,6 +24,10 @@ export class GameScene extends Phaser.Scene {
   private runState!: RunState;
   private finished = false;
   private hud!: Hud;
+  // HUD 전용 카메라(§9-9). 메인 카메라는 플레이어를 따라가며 줌 R이 걸려 있고, Phaser 카메라는
+  // 줌을 뷰포트 중심 기준으로 적용하므로 follow가 없는 고정 UI를 메인 카메라에 얹으면 화면
+  // 중심 쏠림만큼 어긋난다(실측 확인). 그래서 줌 R·원점(0,0)·스크롤 고정인 별도 카메라로 HUD만 그린다.
+  private hudCamera!: Phaser.Cameras.Scene2D.Camera;
 
   private playerView!: EntityView;
   private enemyViews: (EntityView | null)[] = [];
@@ -57,10 +61,21 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
-    createArenaBackground(this, this.runState.trial);
+    const arenaObjects = createArenaBackground(this, this.runState.trial);
     this.cameras.main.setBounds(0, 0, ARENA.WIDTH, ARENA.HEIGHT);
+    // 백킹스토어가 SCREEN.SUPERSAMPLE(R)배라 카메라 줌도 R로 맞춰야 카메라가 보여 주는 월드 영역이
+    // 480x270로 유지된다(GDD §9-9, D40) — 백킹 R배와 줌 R배가 상쇄된다.
+    this.cameras.main.setZoom(SCREEN.SUPERSAMPLE);
+
+    // HUD 전용 카메라. 월드 카메라와 같은 화면을 덮되 절대 스크롤하지 않고(원점 0,0 + 줌 R만),
+    // 월드 오브젝트는 이 카메라에서 제외한다 — 그래야 HUD가 이중으로 그려지지 않는다.
+    this.hudCamera = this.cameras.add(0, 0, this.cameras.main.width, this.cameras.main.height);
+    this.hudCamera.setZoom(SCREEN.SUPERSAMPLE);
+    this.hudCamera.setOrigin(0, 0);
+    this.hudCamera.ignore(arenaObjects);
 
     this.playerView = createEntityView(this, 'player', this.runState.player.x, this.runState.player.y);
+    this.hudCamera.ignore(this.playerView);
     this.cameras.main.startFollow(this.playerView, true, 0.15, 0.15);
 
     this.hud = new Hud(this);
@@ -139,6 +154,7 @@ export class GameScene extends Phaser.Scene {
       if (!this.enemyViews[i] || this.enemyViewKinds[i] !== kind) {
         this.enemyViews[i]?.destroy();
         this.enemyViews[i] = createEntityView(this, kind, enemy.x, enemy.y);
+        this.hudCamera.ignore(this.enemyViews[i]!);
         this.enemyViewKinds[i] = kind;
       }
       const view = this.enemyViews[i]!;
@@ -155,6 +171,7 @@ export class GameScene extends Phaser.Scene {
         const rect = this.add.rectangle(0, 0, VISUAL.SHAPE_PX.arrowLen, VISUAL.SHAPE_PX.arrowWidth, VISUAL.COLOR.ARROW);
         rect.setDepth(VISUAL.DEPTH.ARROW);
         rect.setVisible(false);
+        this.hudCamera.ignore(rect);
         this.projectileViews[i] = rect;
       }
       const view = this.projectileViews[i];
@@ -176,6 +193,7 @@ export class GameScene extends Phaser.Scene {
         const circle = this.add.circle(0, 0, VISUAL.SHAPE_PX.xpOrb / 2, VISUAL.COLOR.XP_ORB);
         circle.setDepth(VISUAL.DEPTH.XP_ORB);
         circle.setVisible(false);
+        this.hudCamera.ignore(circle);
         this.orbViews[i] = circle;
       }
       const view = this.orbViews[i];

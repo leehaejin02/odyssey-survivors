@@ -28,19 +28,25 @@ function argOf(flag) {
 }
 
 // ── 변환 대상 ────────────────────────────────────────────────
-// out 픽셀 크기는 src/config/balance.ts 의 VISUAL.SPRITE_PX 와 같아야 한다.
-// 여기 값을 바꾸는 게 아니라, balance.ts 가 바뀌면 여기를 맞춘다(원본은 balance.ts).
+// px 는 **월드 단위**(balance.ts 의 VISUAL.SPRITE_PX)다. 실제 출력 픽셀은 여기에 R 을 곱한다.
+//
+// R = SCREEN.SUPERSAMPLE (balance.ts, D40). 백킹스토어가 480R x 270R 이고 카메라 줌이 R 이라
+// 카메라가 보여주는 월드 영역은 480x270 그대로다(D14 보존). 스프라이트를 월드 14단위로 그리되
+// 텍스처를 14R px 로 넣으면 텍셀:물리픽셀이 1:1 이 되어 선명해진다.
+//
+// 원본(balance.ts)이 바뀌면 여기를 맞춘다. 반대가 아니다.
+const R = 3;
 const SPRITES = [
   // 1차 생성물(오디세우스 플레이어 스프라이트.png)은 DeeVid AI 워터마크가 박혀 배포에서 뺐다.
   // 워터마크가 바운딩 박스를 우상단으로 늘려 크롭까지 망가졌다. 원본은 출처 증빙으로 남겨 둔다.
-  { key: 'player', src: '오디세우스 플레이어 스프라이트2.png', out: 'public/sprites/player.png', px: 18 },
-  { key: 'grunt',  src: '그리스 구혼자 적 스프라이트.png',     out: 'public/sprites/grunt.png',  px: 14 },
-  { key: 'brute',  src: '로터스이터 적 스프라이트.png',        out: 'public/sprites/brute.png',  px: 22 },
-  { key: 'boss',   src: '폴리페모스 보스 스프라이트.png',      out: 'public/sprites/boss.png',   px: 40 },
+  { key: 'player', src: '오디세우스 플레이어 스프라이트2.png', out: 'public/sprites/player.png', px: 18 * R },
+  { key: 'grunt',  src: '그리스 구혼자 적 스프라이트.png',     out: 'public/sprites/grunt.png',  px: 14 * R },
+  { key: 'brute',  src: '로터스이터 적 스프라이트.png',        out: 'public/sprites/brute.png',  px: 22 * R },
+  { key: 'boss',   src: '폴리페모스 보스 스프라이트.png',      out: 'public/sprites/boss.png',   px: 40 * R },
   // 타이틀 화면 전용. 인게임 player.png(18px)를 확대하면 뭉개지므로 원본에서 따로 뽑는다.
   // 128px = 논리 해상도 높이 270의 47%. 제목·조작안내·시련 3종 목록이 들어갈 자리를 남기는 상한이다.
   // 새 생성물이 아니라 player 와 같은 원본에서 파생된 것이라 ASSET_CREDITS 행이 늘지 않는다.
-  { key: 'titleHero', src: '오디세우스 플레이어 스프라이트2.png', out: 'public/sprites/title-hero.png', px: 128 },
+  { key: 'titleHero', src: '오디세우스 플레이어 스프라이트2.png', out: 'public/sprites/title-hero.png', px: 128 * R },
 ];
 
 // 배경 판정: 아주 밝고(min>222) 거의 무채색(채널 폭<14)인 픽셀만 후보.
@@ -248,17 +254,17 @@ async function prepArena() {
   const srcPath = path.join(SRC, '메가론 아레나 바닥.webp');
   const outPath = path.join(ROOT, 'public/assets/arena.jpg');
   await mkdir(path.dirname(outPath), { recursive: true });
-  // ARENA 960x540 과 1:1 (VISUAL.ARENA_IMAGE_SCALE = 1.0).
+  // ARENA 960x540 의 R 배. 카메라 줌 R 과 상쇄되어 월드 기준으로는 여전히 1:1 이다.
   // pixelArt:true 는 NEAREST 라 1920 을 0.5 로 깔면 2x2 중 1픽셀만 점표본되고 3/4는 화면에 도달하지 못한다.
   // → 축소를 여기서 Lanczos(면적 평균)로 끝내는 편이 더 작으면서 더 잘 보인다. (D25)
   // 배경은 투명 픽셀이 원리적으로 없으므로 JPEG 예외 대상이다(GDD §9-2).
   await run('ffmpeg', [
     '-v', 'error', '-y', '-i', srcPath,
-    '-vf', 'scale=960:540:flags=lanczos',
+    '-vf', `scale=${960 * R}:${540 * R}:flags=lanczos`,
     '-q:v', String(ARENA_JPEG_Q), outPath,
   ]);
   const kb = Math.round((await stat(outPath)).size / 102.4) / 10;
-  console.log(`  arena  → 960x540 jpeg q${ARENA_JPEG_Q}  ${kb}KB`);
+  console.log(`  arena  → ${960 * R}x${540 * R} jpeg q${ARENA_JPEG_Q}  ${kb}KB`);
   return { key: 'arena', kb };
 }
 
@@ -274,8 +280,8 @@ async function main() {
   }
   results.push(await prepArena());
   const total = results.reduce((a, r) => a + r.kb, 0);
-  console.log(`[prep-assets] 이미지 합계 ${total.toFixed(1)}KB (ASSETS.MAX_IMAGE_TOTAL_KB = 800)`);
-  if (total > 800) console.log('  ⚠ 예산 초과 — gd에게 보고 필요');
+  console.log(`[prep-assets] 이미지 합계 ${total.toFixed(1)}KB (ASSETS.MAX_IMAGE_TOTAL_KB = 1200)`);
+  if (total > 1200) console.log('  ⚠ 예산 초과 — gd에게 보고 필요');
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

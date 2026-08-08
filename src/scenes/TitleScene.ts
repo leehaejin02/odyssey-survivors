@@ -23,6 +23,16 @@ export class TitleScene extends Phaser.Scene {
     this.selectedIndex = 0;
     this.entries = [];
 
+    // 백킹스토어가 SCREEN.SUPERSAMPLE(R)배라 카메라 줌도 R로 맞춘다(GDD §9-9, D40).
+    // Phaser 카메라는 기본적으로 줌을 뷰포트 "중심"(origin 0.5,0.5) 기준으로 적용한다 — zoom만
+    // 바꾸면 스크롤이 그대로 0,0이어도 보이는 월드 영역이 중심 쏠림만큼 밀린다(실측 확인:
+    // worldView가 [0,480]이 아니라 [480,960]이 됐고, scrollFactor(0) 오브젝트도 같은 쏠림을 받는다).
+    // GameScene은 startFollow()가 스크롤을 재계산해 이 쏠림을 상쇄했을 뿐 근본 원인은 같다.
+    // 이 씬은 카메라를 스크롤하지 않으므로 origin을 (0,0)으로 바꿔 쏠림 자체를 없앤다 —
+    // 그러면 기본 스크롤(0,0)이 정확히 월드 (0,0)에서 시작해 480x270을 그대로 보여준다.
+    this.cameras.main.setZoom(SCREEN.SUPERSAMPLE);
+    this.cameras.main.setOrigin(0, 0);
+
     armBgmOnFirstInput(this);
 
     this.buildBackground();
@@ -33,7 +43,8 @@ export class TitleScene extends Phaser.Scene {
         fontSize: `${HUD.TITLE.TITLE_FONT_PX}px`,
         color: toCssColor(VISUAL.COLOR.TEXT),
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setResolution(SCREEN.SUPERSAMPLE);
 
     this.add
       .text(SCREEN.WIDTH / 2, HUD.TITLE.HINT_Y, '↑↓ 로 시련 선택, Enter/클릭으로 시작', {
@@ -41,7 +52,8 @@ export class TitleScene extends Phaser.Scene {
         fontSize: `${HUD.TITLE.HINT_FONT_PX}px`,
         color: toCssColor(VISUAL.COLOR.TEXT_DIM),
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setResolution(SCREEN.SUPERSAMPLE);
 
     this.buildHero();
 
@@ -54,6 +66,7 @@ export class TitleScene extends Phaser.Scene {
           color: toCssColor(VISUAL.COLOR.TEXT),
         })
         .setOrigin(0.5)
+        .setResolution(SCREEN.SUPERSAMPLE)
         .setInteractive({ useHandCursor: true });
 
       this.add
@@ -64,7 +77,8 @@ export class TitleScene extends Phaser.Scene {
           wordWrap: { width: SCREEN.WIDTH - 40 },
           align: 'center',
         })
-        .setOrigin(0.5);
+        .setOrigin(0.5)
+        .setResolution(SCREEN.SUPERSAMPLE);
 
       label.on('pointerover', () => {
         this.selectedIndex = index;
