@@ -2,12 +2,12 @@
 // bot.ts — GDD §7 봇 정책. headless playtest 전용(브라우저 실제 플레이는 키보드 입력을 쓴다).
 // 무작위 선택 없음 — 시드 고정 RNG(engine이 소유)와 별개로, 봇 자체는 상태만 보고 결정한다.
 //
-// 구현 결정 (GDD §7이 "느낌"만 규정하고 정확한 알고리즘은 비어 있었다 — tech가 정함):
-// - "위협"의 감지 반경은 WEAPON_BOW.RANGE의 1/3을 쓴다(사거리 자체를 그대로 쓰면 사거리 140px
-//   안에 있기만 해도 늘 "위협"으로 잡혀 오브 회수를 영구히 포기하는 실측 버그가 났다 —
-//   90마리가 480x270 화면에 몰리는 후반부에서는 사실상 항상 사거리 내에 적이 있기 때문이다).
-//   1/3은 "곧 접촉권에 들어올 만큼 가깝다"는 임의의 튜닝 상수이고 balance.ts 수치는 아니지만,
-//   WEAPON_BOW.RANGE에서 유도해 봇 전용 새 숫자를 최소화했다.
+// 구현 결정 (GDD §7-A가 원본. 값은 balance.ts BOT.THREAT_RADIUS_RATIO):
+// - "위협"의 감지 반경은 WEAPON_BOW.RANGE * BOT.THREAT_RADIUS_RATIO(=1/3)를 쓴다(사거리 자체를
+//   그대로 쓰면 사거리 140px 안에 있기만 해도 늘 "위협"으로 잡혀 오브 회수를 영구히 포기하는
+//   실측 버그가 났다 — 90마리가 480x270 화면에 몰리는 후반부에서는 사실상 항상 사거리 내에
+//   적이 있기 때문이다). 이 비율은 밸런스 수치가 아니라 측정 도구의 일부다(D10 연장) —
+//   바꾸면 과거 측정값과 비교 불가하므로 balance.ts BOT.THREAT_RADIUS_RATIO에서만 바꾼다.
 // - 위협이 없을 때만 가장 가까운 경험치 오브로 향한다. 위협이 있으면 회수를 포기하고 이격을 우선한다.
 // ─────────────────────────────────────────────────────────────
 
@@ -15,8 +15,8 @@ import { BOT, WEAPON_BOW, type UpgradeDef } from '../config/balance';
 import type { PlayerRuntime, RunState } from './types';
 import type { Vec2 } from './math';
 
-/** 봇이 "위협"으로 간주하는 감지 반경. WEAPON_BOW.RANGE에서 유도(근거는 위 주석). */
-const BOT_THREAT_RADIUS = WEAPON_BOW.RANGE / 3;
+/** 봇이 "위협"으로 간주하는 감지 반경. WEAPON_BOW.RANGE * BOT.THREAT_RADIUS_RATIO(근거는 위 주석 및 GDD §7-A). */
+const BOT_THREAT_RADIUS = WEAPON_BOW.RANGE * BOT.THREAT_RADIUS_RATIO;
 
 export interface BotState {
   nextDecisionAtMs: number;

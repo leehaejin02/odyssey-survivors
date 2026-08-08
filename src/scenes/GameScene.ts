@@ -1,15 +1,14 @@
 // ─────────────────────────────────────────────────────────────
 // GameScene.ts — sim의 상태를 그리기만 한다(하네스 3). 게임 규칙 판정은 전부 src/sim/에 있다.
-//
-// 이 단계에는 HUD(§8-A)와 에셋 로딩이 없다(다음 단계). 레벨업 3택은 코어 루프의 필수
-// 상호작용이라 아주 단순한(스타일 없는) 클릭 목록으로 지금 넣는다 — 이걸 빼면 사람이 플레이할 때
-// 3택을 고를 방법이 없어 "코어 루프 완주"를 사람이 확인할 수 없다.
+// HUD(§8-A)와 3택 화면(§9-5-A)은 Hud.ts에 위임한다. 배경은 background.ts에 위임한다.
 // ─────────────────────────────────────────────────────────────
 
 import Phaser from 'phaser';
-import { ARENA, SCREEN, TRIALS, VISUAL, type EnemyTypeId, type UpgradeDef } from '../config/balance';
+import { ARENA, TRIALS, VISUAL, type EnemyTypeId } from '../config/balance';
 import { createRunState, resolveUpgradeChoice, stepRun, type RunState, type Vec2 } from '../sim';
 import { createEntityView, type EntityKind, type EntityView } from './sprites';
+import { createArenaBackground } from './background';
+import { Hud } from './Hud';
 
 interface GameSceneData {
   trialId: string;
@@ -24,14 +23,13 @@ const ENEMY_KIND: Record<EnemyTypeId, EntityKind> = {
 export class GameScene extends Phaser.Scene {
   private runState!: RunState;
   private finished = false;
+  private hud!: Hud;
 
   private playerView!: EntityView;
   private enemyViews: (EntityView | null)[] = [];
   private enemyViewKinds: (EntityKind | null)[] = [];
   private projectileViews: Phaser.GameObjects.Rectangle[] = [];
   private orbViews: Phaser.GameObjects.Arc[] = [];
-
-  private choiceTexts: Phaser.GameObjects.Text[] = [];
 
   private keys!: {
     w: Phaser.Input.Keyboard.Key;
@@ -56,19 +54,18 @@ export class GameScene extends Phaser.Scene {
     this.enemyViewKinds = [];
     this.projectileViews = [];
     this.orbViews = [];
-    this.choiceTexts = [];
   }
 
   create(): void {
-    this.cameras.main.setBackgroundColor(VISUAL.COLOR.ARENA_FALLBACK);
-    this.add
-      .rectangle(ARENA.WIDTH / 2, ARENA.HEIGHT / 2, ARENA.WIDTH, ARENA.HEIGHT, VISUAL.COLOR.ARENA_FALLBACK)
-      .setDepth(VISUAL.DEPTH.ARENA);
-
+    createArenaBackground(this, this.runState.trial);
     this.cameras.main.setBounds(0, 0, ARENA.WIDTH, ARENA.HEIGHT);
 
     this.playerView = createEntityView(this, 'player', this.runState.player.x, this.runState.player.y);
     this.cameras.main.startFollow(this.playerView, true, 0.15, 0.15);
+
+    this.hud = new Hud(this);
+    this.hud.create();
+    this.hud.showBanner(this.runState.trial);
 
     const keyboard = this.input.keyboard;
     this.keys = {
@@ -84,15 +81,17 @@ export class GameScene extends Phaser.Scene {
     if (this.finished) return;
 
     if (this.runState.pendingChoice) {
-      this.ensureChoiceUI(this.runState.pendingChoice);
+      this.hud.update(this.runState);
+      this.hud.showChoices(this.runState, this.runState.pendingChoice, (id) => this.pickChoice(id));
       return;
     }
-    this.clearChoiceUI();
+    this.hud.hideChoices();
 
     const dt = Math.min(deltaMs, 100); // 탭 전환 등 큰 델타로 인한 스파이크 방지(밸런스 값 아님)
     const input = this.readMoveInput();
     stepRun(this.runState, input, dt);
     this.syncViews();
+    this.hud.update(this.runState);
 
     if (this.runState.result !== 'playing') {
       this.finished = true;
@@ -104,6 +103,11 @@ export class GameScene extends Phaser.Scene {
         level: this.runState.player.level,
       });
     }
+  }
+
+  private pickChoice(id: string): void {
+    resolveUpgradeChoice(this.runState, id);
+    this.hud.hideChoices();
   }
 
   private readMoveInput(): Vec2 {
@@ -182,43 +186,5 @@ export class GameScene extends Phaser.Scene {
       view.setVisible(true);
       view.setPosition(orb.x, orb.y);
     }
-  }
-
-  // ── 레벨업 3택: 스타일 없는 최소 클릭 UI. HUD 배지/배치(§9-5)는 다음 단계다. ──
-  private ensureChoiceUI(choices: readonly UpgradeDef[]): void {
-    if (this.choiceTexts.length > 0) return;
-
-    // setScrollFactor(0)이므로 화면(스크린) 좌표계로 배치한다 — 카메라 스크롤을 더하지 않는다.
-    const centerX = SCREEN.WIDTH / 2;
-    const startY = SCREEN.HEIGHT / 2 - ((choices.length - 1) * 16) / 2;
-
-    choices.forEach((def, index) => {
-      const level = this.runState.player.upgradeLevels[def.id] ?? 0;
-      const label = `${def.name}${level > 0 ? ` (Lv.${level + 1})` : ''}`;
-      const text = this.add
-        .text(centerX, startY + index * 16, label, {
-          fontFamily: 'sans-serif',
-          fontSize: '10px',
-          color: '#f2ece0',
-          backgroundColor: '#1a1620',
-          padding: { x: 4, y: 2 },
-        })
-        .setOrigin(0.5)
-        .setDepth(VISUAL.DEPTH.BANNER)
-        .setScrollFactor(0)
-        .setInteractive({ useHandCursor: true });
-
-      text.on('pointerdown', () => {
-        resolveUpgradeChoice(this.runState, def.id);
-        this.clearChoiceUI();
-      });
-
-      this.choiceTexts.push(text);
-    });
-  }
-
-  private clearChoiceUI(): void {
-    for (const text of this.choiceTexts) text.destroy();
-    this.choiceTexts = [];
   }
 }

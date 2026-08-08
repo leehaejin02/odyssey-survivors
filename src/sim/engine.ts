@@ -70,6 +70,7 @@ export function createRunState(trial: TrialDef, seed: number): RunState {
     totalSpawned: 0,
     bossSpawned: false,
     spawnTimerMs: computeSpawnIntervalMs(trial, 0),
+    progress: 0,
     levelUpsCount: 0,
     maxAliveSeen: 0,
     player,
@@ -216,11 +217,18 @@ function updateEnemies(state: RunState, dtSec: number): void {
   }
 }
 
-function findNearestEnemyInRange(state: RunState, origin: Vec2, range: number): EnemyRuntime | null {
+/** 사거리 내에서 최근접 적을 찾는다. bossOnly면 type='boss'인 적만 후보로 본다. */
+function findNearestEnemyInRange(
+  state: RunState,
+  origin: Vec2,
+  range: number,
+  bossOnly: boolean,
+): EnemyRuntime | null {
   let best: EnemyRuntime | null = null;
   let bestDist = range;
   for (const e of state.enemies) {
     if (!e.active) continue;
+    if (bossOnly && e.type !== 'boss') continue;
     const dist = Math.hypot(origin.x - e.x, origin.y - e.y);
     if (dist <= bestDist) {
       bestDist = dist;
@@ -230,9 +238,22 @@ function findNearestEnemyInRange(state: RunState, origin: Vec2, range: number): 
   return best;
 }
 
+/**
+ * 조준 대상 선택 — GDD §3-A. `EnemyRuntime.type`으로만 분기하는 전역 규칙(시련 id 분기 아님).
+ * - 'nearest'             : 사거리 내 최근접 적.
+ * - 'bossFirstThenNearest': 사거리 내에 boss가 있으면 그중 최근접 boss, 없으면 사거리 내 최근접 적.
+ */
+function selectTarget(state: RunState, origin: Vec2, range: number): EnemyRuntime | null {
+  if (WEAPON_BOW.AIM === 'bossFirstThenNearest') {
+    const boss = findNearestEnemyInRange(state, origin, range, true);
+    if (boss) return boss;
+  }
+  return findNearestEnemyInRange(state, origin, range, false);
+}
+
 function fireWeapon(state: RunState, dtMs: number): void {
   const player = state.player;
-  const target = findNearestEnemyInRange(state, player, WEAPON_BOW.RANGE);
+  const target = selectTarget(state, player, WEAPON_BOW.RANGE);
   if (!target) return; // 사거리 내 적이 없으면 쿨다운도 흐르지 않는다(WEAPON_BOW.AIM 규칙)
 
   player.fireCooldownRemainingMs -= dtMs;
@@ -362,6 +383,7 @@ function evaluateOutcome(state: RunState): void {
   if (state.result !== 'playing') return;
 
   const progress = trialProgress(state.trial, state.elapsedSec, state.kills, state.bossKills);
+  state.progress = progress;
   if (progress >= state.trial.goal) {
     state.result = 'cleared';
     return;

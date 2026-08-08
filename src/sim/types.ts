@@ -83,6 +83,12 @@ export interface RunState {
   bossSpawned: boolean;
   spawnTimerMs: number;
 
+  /**
+   * trialProgress()의 마지막 계산값. **호출은 evaluateOutcome() 1곳뿐**(GDD §8-3) —
+   * HUD는 이 필드를 읽기만 하고, 진행도를 스스로 재계산하지 않는다.
+   */
+  progress: number;
+
   levelUpsCount: number;
   maxAliveSeen: number;
 
