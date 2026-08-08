@@ -18,13 +18,16 @@ import {
   SCREEN,
   VISUAL,
   UPGRADE_POOL,
+  UPGRADE_STAT_DISPLAY,
   xpToNextLevel,
   type TrialDef,
   type UpgradeCategory,
   type UpgradeDef,
+  type UpgradeStatDisplay,
 } from '../config/balance';
-import type { RunState } from '../sim';
+import type { PlayerRuntime, RunState } from '../sim';
 import { toggleMute } from './audio';
+import { toCssColor } from './colors';
 
 const CAT_COLOR: Record<UpgradeCategory, number> = {
   fire: VISUAL.COLOR.CAT_FIRE,
@@ -37,6 +40,81 @@ const CAT_LABEL: Record<UpgradeCategory, string> = {
   life: '생존',
   util: '유틸',
 };
+
+/**
+ * 3택 카드 "현재→다음" 줄이 읽어야 할 `PlayerRuntime` 필드. `src/sim/upgrades.ts`의
+ * `STAT_FIELD`와 같은 매핑이지만 sim 파일을 건드리지 않기 위해 렌더 쪽에 따로 둔다(하네스 3).
+ * `healPct`(NECTAR)는 누적 스탯이 아니라 이 표에 없다 — `buildDeltaLine`에서 별도 분기한다.
+ */
+type PersistentStatKey = keyof Pick<
+  PlayerRuntime,
+  'damage' | 'projectiles' | 'cooldownMs' | 'pierce' | 'maxHp' | 'iframeMs' | 'moveSpeed' | 'pickupRadius'
+>;
+
+const STAT_PLAYER_FIELD: Record<string, PersistentStatKey> = {
+  damage: 'damage',
+  projectiles: 'projectiles',
+  cooldown: 'cooldownMs',
+  pierce: 'pierce',
+  maxHp: 'maxHp',
+  iframeMs: 'iframeMs',
+  moveSpeed: 'moveSpeed',
+  pickupRadius: 'pickupRadius',
+};
+
+/**
+ * 표시 반올림(GDD §9-5-A ⓑ 3·4). `decimals` 자리에서 **내부 원값에 대해 딱 한 번** 반올림하고,
+ * 소수부가 전부 0이면 소수점을 지운다(`12.0` → `12`). 누적 반올림 금지 — 호출자는 항상
+ * `PlayerRuntime`의 raw 값에서 이 함수를 부른다(표시된 이전 값을 이어 쓰지 않는다).
+ */
+function formatDisplayNumber(value: number, decimals: number): string {
+  const fixed = value.toFixed(decimals);
+  if (decimals === 0) return fixed;
+  let trimmed = fixed;
+  while (trimmed.endsWith('0')) trimmed = trimmed.slice(0, -1);
+  if (trimmed.endsWith('.')) trimmed = trimmed.slice(0, -1);
+  return trimmed;
+}
+
+/** mulPct·pct 공용 퍼센트 표기. 9종 전부 정수 퍼센트로 설계돼 있다(소수 퍼센트 없음). */
+function formatPercent(value: number): string {
+  return Math.round(Math.abs(value) * 100).toString();
+}
+
+/** 효과 줄(`{라벨} {증분}`). 조립 규칙은 GDD §9-5-A ⓑ. */
+function buildEffectLine(def: UpgradeDef, display: UpgradeStatDisplay): string {
+  if (def.mode === 'add') {
+    return `${display.label} +${formatDisplayNumber(def.value, display.decimals)}${display.unit}`;
+  }
+  if (def.mode === 'mulPct') {
+    const sign = def.value >= 0 ? '+' : '-';
+    return `${display.label} ${sign}${formatPercent(def.value)}%`;
+  }
+  return `${display.label} ${formatPercent(def.value)}%`;
+}
+
+/**
+ * 현재→다음 줄. `NECTAR`(stat === 'healPct')만 예외 규칙 — 누적 스탯이 없어
+ * `HP {현재} → {min(maxHp, hp + maxHp*value)}`을 대신 보여준다(clamp 반영, GDD §9-5-A ⓑ).
+ */
+function buildDeltaLine(def: UpgradeDef, display: UpgradeStatDisplay, player: PlayerRuntime): string {
+  if (def.stat === 'healPct') {
+    const healed = Math.min(player.maxHp, player.hp + player.maxHp * def.value);
+    return `HP ${formatDisplayNumber(player.hp, display.decimals)} → ${formatDisplayNumber(healed, display.decimals)}`;
+  }
+  const field = STAT_PLAYER_FIELD[def.stat];
+  const current = field ? player[field] : 0;
+  const next = def.mode === 'mulPct' ? current * (1 + def.value) : current + def.value;
+  return `${formatDisplayNumber(current, display.decimals)}${display.unit} → ${formatDisplayNumber(next, display.decimals)}${display.unit}`;
+}
+
+/** 레벨·상한 줄. `maxLevel === 0`(NECTAR)만 `Lv.n (무제한)` (GDD §9-5-A ⓒ). */
+function buildLevelLine(def: UpgradeDef, nextLevel: number): string {
+  if (def.maxLevel === 0) {
+    return `Lv.${nextLevel} (${HUD.CHOICE_CARD.UNLIMITED_LABEL})`;
+  }
+  return `Lv.${nextLevel} / ${def.maxLevel}`;
+}
 
 function formatTime(sec: number): string {
   const clamped = Math.max(0, sec);
@@ -79,6 +157,8 @@ interface ChoiceCard {
   badge: Phaser.GameObjects.Rectangle;
   catLabel: Phaser.GameObjects.Text;
   nameText: Phaser.GameObjects.Text;
+  effectText: Phaser.GameObjects.Text;
+  deltaText: Phaser.GameObjects.Text;
   levelText: Phaser.GameObjects.Text;
 }
 
@@ -371,7 +451,7 @@ export class Hud {
       .text(SCREEN.WIDTH / 2, HUD.CHOICE_CARD.TITLE_Y, `LEVEL ${state.player.level}`, {
         fontFamily: 'sans-serif',
         fontSize: `${HUD.CHOICE_CARD.TITLE_FONT_PX}px`,
-        color: '#f2ece0',
+        color: toCssColor(VISUAL.COLOR.TEXT),
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
@@ -386,66 +466,109 @@ export class Hud {
     choices.forEach((def, index) => {
       const x = left + index * (card.W + card.GAP);
       const y = card.Y;
+      const catColor = CAT_COLOR[def.category];
+      const display = UPGRADE_STAT_DISPLAY[def.stat];
 
       const hit = this.scene.add
-        .rectangle(x, y, card.W, card.H, VISUAL.COLOR.ARENA_FALLBACK)
+        .rectangle(x, y, card.W, card.H, VISUAL.COLOR.CHOICE_BG)
         .setOrigin(0, 0)
         .setScrollFactor(0)
         .setDepth(VISUAL.DEPTH.HUD)
-        .setStrokeStyle(1, CAT_COLOR[def.category])
+        .setStrokeStyle(card.STROKE_PX, catColor)
         .setInteractive({ useHandCursor: true });
 
       const badge = this.scene.add
-        .rectangle(x + 8, y + 8, card.BADGE_SIZE, card.BADGE_SIZE, CAT_COLOR[def.category])
+        .rectangle(x + card.PAD, y + card.BADGE_DY, card.BADGE_SIZE, card.BADGE_SIZE, catColor)
         .setOrigin(0, 0)
         .setScrollFactor(0)
         .setDepth(VISUAL.DEPTH.HUD + 1);
 
       const catLabel = this.scene.add
-        .text(x + 8 + card.BADGE_SIZE + 4, y + 8 + card.BADGE_SIZE / 2, CAT_LABEL[def.category], {
-          fontFamily: 'sans-serif',
-          fontSize: `${card.SUB_FONT_PX}px`,
-          color: '#9a9184',
-        })
+        .text(
+          x + card.PAD + card.BADGE_SIZE + card.CAT_LABEL_DX,
+          y + card.BADGE_DY + card.BADGE_SIZE / 2,
+          CAT_LABEL[def.category],
+          {
+            fontFamily: 'sans-serif',
+            fontSize: `${card.SUB_FONT_PX}px`,
+            color: toCssColor(VISUAL.COLOR.TEXT_DIM),
+          },
+        )
         .setOrigin(0, 0.5)
         .setScrollFactor(0)
         .setDepth(VISUAL.DEPTH.HUD + 1)
         .setResolution(SCREEN.SUPERSAMPLE);
 
+      // 이름은 1행 고정이며 줄바꿈을 허용하지 않는다(GDD §9-5-A ⓐ) — wordWrap을 쓰지 않는다.
       const nameText = this.scene.add
-        .text(x + card.W / 2, y + 34, def.name, {
+        .text(x + card.W / 2, y + card.NAME_DY, def.name, {
           fontFamily: 'sans-serif',
           fontSize: `${card.NAME_FONT_PX}px`,
-          color: '#f2ece0',
+          color: toCssColor(VISUAL.COLOR.TEXT),
           align: 'center',
-          wordWrap: { width: card.W - 16 },
         })
-        .setOrigin(0.5, 0)
+        .setOrigin(0.5, 0.5)
+        .setScrollFactor(0)
+        .setDepth(VISUAL.DEPTH.HUD + 1)
+        .setResolution(SCREEN.SUPERSAMPLE);
+
+      // 효과 줄(신설, D51) — {라벨} {증분}. 카테고리 색으로 배지 색을 카드 안에서 한 번 더 반복한다.
+      const effectText = this.scene.add
+        .text(x + card.W / 2, y + card.EFFECT_DY, buildEffectLine(def, display), {
+          fontFamily: 'sans-serif',
+          fontSize: `${card.EFFECT_FONT_PX}px`,
+          color: toCssColor(catColor),
+          align: 'center',
+        })
+        .setOrigin(0.5, 0.5)
+        .setScrollFactor(0)
+        .setDepth(VISUAL.DEPTH.HUD + 1)
+        .setResolution(SCREEN.SUPERSAMPLE);
+
+      // 현재→다음 줄(신설, D51).
+      const deltaText = this.scene.add
+        .text(x + card.W / 2, y + card.DELTA_DY, buildDeltaLine(def, display, state.player), {
+          fontFamily: 'sans-serif',
+          fontSize: `${card.SUB_FONT_PX}px`,
+          color: toCssColor(VISUAL.COLOR.TEXT_DIM),
+          align: 'center',
+        })
+        .setOrigin(0.5, 0.5)
         .setScrollFactor(0)
         .setDepth(VISUAL.DEPTH.HUD + 1)
         .setResolution(SCREEN.SUPERSAMPLE);
 
       const nextLevel = (state.player.upgradeLevels[def.id] ?? 0) + 1;
       const levelText = this.scene.add
-        .text(x + card.W / 2, y + card.H - 14, `Lv.${nextLevel}`, {
+        .text(x + card.W / 2, y + card.LEVEL_DY, buildLevelLine(def, nextLevel), {
           fontFamily: 'sans-serif',
           fontSize: `${card.SUB_FONT_PX}px`,
-          color: '#9a9184',
+          color: toCssColor(VISUAL.COLOR.TEXT_DIM),
         })
-        .setOrigin(0.5, 0)
+        .setOrigin(0.5, 0.5)
         .setScrollFactor(0)
         .setDepth(VISUAL.DEPTH.HUD + 1)
         .setResolution(SCREEN.SUPERSAMPLE);
 
       hit.on('pointerdown', () => onPick(def.id));
+      // 호버 = 유일한 상태 표시(입력이 클릭 1종, GDD §9-5-A ⓕ). 테두리 두께 + 배경색만 바꾸고
+      // 크기(scale)는 건드리지 않는다 — SCREEN.SUPERSAMPLE이 만든 1 텍셀=1 물리 픽셀을 지킨다.
+      hit.on('pointerover', () => {
+        hit.setStrokeStyle(card.HOVER_STROKE_PX, catColor).setFillStyle(VISUAL.COLOR.CHOICE_BG_HOVER);
+      });
+      hit.on('pointerout', () => {
+        hit.setStrokeStyle(card.STROKE_PX, catColor).setFillStyle(VISUAL.COLOR.CHOICE_BG);
+      });
 
       this.ignoreOnMain(hit);
       this.ignoreOnMain(badge);
       this.ignoreOnMain(catLabel);
       this.ignoreOnMain(nameText);
+      this.ignoreOnMain(effectText);
+      this.ignoreOnMain(deltaText);
       this.ignoreOnMain(levelText);
 
-      this.choiceCards.push({ hit, badge, catLabel, nameText, levelText });
+      this.choiceCards.push({ hit, badge, catLabel, nameText, effectText, deltaText, levelText });
     });
   }
 
@@ -460,6 +583,8 @@ export class Hud {
       c.badge.destroy();
       c.catLabel.destroy();
       c.nameText.destroy();
+      c.effectText.destroy();
+      c.deltaText.destroy();
       c.levelText.destroy();
     }
     this.choiceCards = [];
