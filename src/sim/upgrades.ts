@@ -16,9 +16,12 @@ function isEligible(def: UpgradeDef, upgradeLevels: Record<string, number>): boo
 }
 
 /**
- * 3택 후보 구성. 화력 1 + 생존 1 + 유틸 1을 각 카테고리에서 하나씩 뽑고,
- * 만렙 아닌 후보가 없는 카테고리는 건너뛴 뒤 남은 카테고리에서 보충한다.
- * → 결과가 3개 미만일 수 있다(전 종목 만렙인 극단적 후반부). 호출자는 빈 배열도 처리해야 한다.
+ * 3택 후보 구성. 화력 1 + 생존 1 + 유틸 1을 각 카테고리에서 하나씩 뽑는다.
+ * 만렙 아닌 후보가 없는 카테고리는 건너뛴다 — 이때 남은(=이미 뽑은) 카테고리를
+ * 중복시켜 억지로 3개를 채우지 않는다. 카테고리 중복은 "고갈되지 않은 카테고리가
+ * 하나 이하로 남아 달리 채울 방법이 없을 때"만 최후 수단으로 허용한다
+ * (예: fire·util이 동시에 만렙이라 life 하나만 남는 극단적 후반부).
+ * → 결과가 3개 미만일 수 있다. 호출자는 빈 배열도 처리해야 한다.
  */
 export function buildUpgradeChoices(rng: Rng, upgradeLevels: Record<string, number>): UpgradeDef[] {
   const chosen: UpgradeDef[] = [];
@@ -36,7 +39,11 @@ export function buildUpgradeChoices(rng: Rng, upgradeLevels: Record<string, numb
 
   // "3택"의 3은 UPGRADE_CATEGORIES.length(화력/생존/유틸)에서 그대로 유도한다 — 새 리터럴을 박지 않는다.
   const choiceCount = UPGRADE_CATEGORIES.length;
-  if (chosen.length < choiceCount) {
+
+  // 카테고리 루프를 한 번 돌았으니 이 시점에 chosen.length === 성공한 카테고리 수다.
+  // 카테고리 중복 채우기는 "성공한 카테고리가 1개 이하"(= 고갈 안 된 카테고리가 사실상 하나뿐)일
+  // 때만 허용한다. 정확히 카테고리 1개만 고갈된 경우(성공 2개)는 억지로 채우지 않고 2개로 끝낸다.
+  if (chosen.length < choiceCount && chosen.length <= UPGRADE_CATEGORIES.length - 2) {
     const remaining = UPGRADE_POOL.filter((def) => !usedIds.has(def.id) && isEligible(def, upgradeLevels));
     while (chosen.length < choiceCount && remaining.length > 0) {
       const idx = nextInt(rng, remaining.length);
