@@ -3,6 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 파비콘 파일이 없으면 브라우저가 /favicon.ico를 자동 요청해 404 콘솔 에러를 남긴다(실측 확인).
+         전용 아이콘 파일을 새로 만들지 않고(§2 에셋 상한 밖) 빈 데이터 URI로 그 요청 자체를 막는다. -->
+    <link rel="icon" href="data:," />
     <title>오디세이 서바이버즈</title>
     <style>
       html,
@@ -25,7 +28,7 @@
         display: block;
       }
     </style>
-    <script type="module" crossorigin src="/odyssey-survivors/assets/index-CZP6ygea.js"></script>
+    <script type="module" crossorigin src="/odyssey-survivors/assets/index-HBWhwpvi.js"></script>
   </head>
   <body>
     <div id="app"></div>
